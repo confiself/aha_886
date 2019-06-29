@@ -1,11 +1,11 @@
-操作步骤：
-1 生成数据
-python data_helper.py
-2 训练和评估
-python traffic_flow.py
+#操作步骤：
+##1 生成数据
+`python data_helper.py`
+##2 训练和评估
+`python traffic_flow.py`
 
-方案1：
-模型结构：2层全连接
+#方案1：
+##模型结构：2层全连接
 输入：天气, 离放假2月4日的间隔天数，分钟段，周几，路口
 输出：各个路口的总流量
 
