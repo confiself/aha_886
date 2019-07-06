@@ -4,8 +4,9 @@ from keras.models import Sequential, load_model
 import data_helper
 import numpy as np
 import copy
-
-# import matplotlib.pyplot as plt
+import tensorflow as tf
+import os
+import keras.backend as K
 
 BATCH_SIZE = 16
 NUM_EPOCHS = 10
@@ -22,12 +23,27 @@ def train():
     model.add(Dense(1, kernel_initializer='glorot_uniform'))
     model.compile(loss='mse', optimizer='adam')
     x_train, y_train, x_test, y_test = data_helper.get_train_data()
-    history = model.fit(x_train, y_train, batch_size=BATCH_SIZE, epochs=NUM_EPOCHS, validation_split=0.2)
+    model.fit(x_train, y_train, batch_size=BATCH_SIZE, epochs=NUM_EPOCHS, validation_split=0.2)
     model.save('model/model.h5')
-    # plot loss
-    # plt.plot(history.history['loss', 'val_loss'])
-    # plt.legend(['train', 'test'], loc='upper left')
-    # plt.show()
+    export_model(model, 'model/')
+
+
+def export_model(model, export_path, export_version=1):
+    signature = tf.saved_model.signature_def_utils.predict_signature_def(
+        inputs={'inputs': model.input}, outputs={'result': model.output})
+    export_path = os.path.join(
+        tf.compat.as_bytes(export_path),
+        tf.compat.as_bytes(str(export_version)))
+    builder = tf.saved_model.builder.SavedModelBuilder(export_path)
+    legacy_init_op = tf.group(tf.tables_initializer(), name='legacy_init_op')
+    builder.add_meta_graph_and_variables(
+        sess=K.get_session(),
+        tags=[tf.saved_model.tag_constants.SERVING],
+        signature_def_map={
+            'predictions': signature,
+        },
+        legacy_init_op=legacy_init_op)
+    builder.save()
 
 
 def predict_custom_date(date_str, cross_name, weather=1):
@@ -171,4 +187,3 @@ if __name__ == '__main__':
     train()
     evaluate()
     # submit()
-

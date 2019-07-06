@@ -5,11 +5,19 @@ import datetime
 import os
 import re
 import numpy as np
+import copy
 import zipfile
+
 ROAD_CROSS_NAMES = {'chongzhi_beier': 0, 'chongzhi_jiaxian': 1, 'chongzhi_longping': 2,
                     'wuhe_jiaxian': 3, 'wuhe_longping': 4, 'wuhe_zhangheng': 5}
 
 DATA_FILE_NAME = 'traffic_flow_prediction_data.zip'
+START_MINUTE = 5 * 60
+STOP_MINUTE = 21 * 60
+
+# 归一化参数，model_arts无法读取自定义文件
+SCALLER_PARAMS = [[1., 12.49746284, 717.33568145, 3.0345054, 2.43663065, 79.95080891],
+                  [1., 6.02144121, 416.47860579, 2.03089468, 1.68925719, 57.33254784]]
 
 
 def _parse_file(file_path, data):
@@ -47,7 +55,7 @@ def get_date_info(date_str):
     week_day = record_date.weekday().real
     holiday_count_down = abs(datetime.datetime(2019, 2, 4, 23, 59, 59) - record_date).days
     return minute, week_day, holiday_count_down
-    
+
 
 def _pre_process_data():
     _data_dir = 'data'
@@ -83,9 +91,39 @@ def _pre_process_data():
     model_path = 'model'
     if not os.path.exists(model_path):
         os.makedirs(model_path)
+    print scaller.mean_
+    print scaller.scale_
     np.savetxt('model/scaller.model', [scaller.mean_, scaller.scale_])
     np.savetxt('model/valid_data', valid_data, fmt='%d')
     np.savetxt('model/train_data', train_data)
+
+
+def get_predict_data(date_str, cross_name, match_level):
+    _, week_day, holiday_count_down = get_date_info(date_str)
+
+    # scale_params = np.loadtxt('scaller.model')
+    def _cross_name(x):
+        if isinstance(x, str):
+            return ROAD_CROSS_NAMES[x]
+        return x
+
+    def _fit(data):
+        for i in range(len(data)):
+            for j in range(len(data[i])):
+                data[i][j] = (data[i][j] - SCALLER_PARAMS[0][j]) / SCALLER_PARAMS[1][j]
+        return data
+
+    x_predict = [[1, holiday_count_down, minute, week_day, _cross_name(cross_name)]
+                 for minute in range(0, 24 * 60, 5)]
+    if match_level == 'heat':
+        x_predict = filter(lambda _x: START_MINUTE <= _x[2] < STOP_MINUTE, x_predict)
+    x_predict_fit = _fit(copy.deepcopy(x_predict))
+    return x_predict_fit
+
+
+def parse_resp_data(data):
+    # scale_params = np.loadtxt('scaller.model')
+    return [int(x[0] * SCALLER_PARAMS[1][-1] + SCALLER_PARAMS[0][-1]) for x in data]
 
 
 def get_train_data():
@@ -96,6 +134,7 @@ def get_train_data():
     x_train, y_train, x_test, y_test = x_data[0: train_size], y_data[0:train_size], \
                                        x_data[train_size:], y_data[train_size:]
     return x_train, y_train, x_test, y_test
+
 
 if __name__ == '__main__':
     _pre_process_data()
