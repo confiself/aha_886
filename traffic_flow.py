@@ -11,8 +11,8 @@ import keras.backend as K
 import pandas as pd
 import matplotlib.pyplot as plt
 
-BATCH_SIZE = 32
-NUM_EPOCHS = 10
+BATCH_SIZE = 16
+NUM_EPOCHS = 20
 
 
 def train():
@@ -132,7 +132,7 @@ def _get_regression_score(data_predict, data_true):
 
 def evaluate():
     cross_name = 'wuhe_zhangheng'
-    data_predict = predict_custom_date('2019/02/04', cross_name)
+    data_predict = predict_custom_date('2019/1/17', cross_name)
     valid_data = pd.read_csv('model/valid_data')
     valid_data = valid_data[valid_data['cross_name'] == predict_helper.ROAD_CROSS_NAMES[cross_name]]
     valid_data = valid_data.groupby(by=['minute'])['value'].sum().tolist()

@@ -77,4 +77,3 @@ def get_train_data():
 
 if __name__ == '__main__':
     _pre_process_data()
-    # get_train_data()
