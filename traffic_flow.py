@@ -59,8 +59,7 @@ def predict_custom_date(date_str, cross_name):
     model = load_model('model/model.h5')
     x_predict_fit = x_predict / np.array(predict_helper.NORMALIZE_PARAMS, dtype=float)
     out = model.predict([x_predict_fit]).flatten()
-    out = predict_helper.merge_location_direct(out)
-    return [{'minute': x_predict[index * 8][2], 'value': out[index]}
+    return [{'minute': x_predict[index][2], 'value': out[index]}
             for index in range(len(out))]
 
 
@@ -156,6 +155,6 @@ def evaluate():
 
 
 if __name__ == '__main__':
-    # train()
+    train()
     evaluate()
     # submit()

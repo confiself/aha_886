@@ -30,7 +30,6 @@ class PredictService(TfServingBaseService):
     def _postprocess(self, data):
         print("begin to post process")
         data = [x[0] if isinstance(x, list) else x for x in data['result']]
-        data = predict_helper.merge_location_direct(data)
         schema = json.dumps({'wuhe_zhangheng': data})
         print("end to post process")
         return {"data": {"resp_data": schema}}

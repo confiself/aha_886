@@ -9,8 +9,8 @@ ROAD_LOCATION_NAMES = {'east': 0, 'south': 1, 'west': 2, 'north': 3}
 
 DIRECTIONS = (0, 1)
 
-# 天气，离放假前的天数，分钟段，周几 ,路口，位置，方向
-NORMALIZE_PARAMS = [1, 30, 24 * 60, 7, 5, 4, 1]
+# 天气，离放假前的天数，分钟段，周几 ,路口
+NORMALIZE_PARAMS = [1, 30, 24 * 60, 7, 5]
 
 
 def get_cross_name(x):
@@ -39,23 +39,9 @@ def get_predict_data(date_str, cross_name, match_level):
     cross_name = ROAD_CROSS_NAMES[cross_name]
     x_predict = []
     for minute in range(0, 24 * 60, 5):
-        for location in sorted(ROAD_LOCATION_NAMES.values()):
-            for direct in DIRECTIONS:
-                x_predict.append([1, holiday_count_down, minute, week_day, cross_name, location, direct])
+        x_predict.append([1, holiday_count_down, minute, week_day, cross_name])
     if match_level == 'heat':
         x_predict = filter(lambda _x: START_MINUTE <= _x[2] < STOP_MINUTE, x_predict)
         x_predict = np.array(x_predict) / np.array(NORMALIZE_PARAMS, dtype=float)
         x_predict = x_predict.tolist()
     return x_predict
-
-
-def merge_location_direct(data):
-    """前8个数值作为一组
-    :param data:
-    :return:
-    """
-    for i, value in enumerate(data):
-        index = int(i / 8)
-        if i != index * 8:
-            data[index * 8] += value
-    return [_ for x, _ in enumerate(data) if x % 8 == 0]
