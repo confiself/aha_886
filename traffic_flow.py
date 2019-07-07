@@ -1,31 +1,37 @@
 #! coding:utf-8
-from keras.layers import Dense, Dropout
-from keras.models import Sequential, load_model
+from keras.layers import Dense, Dropout, Input
+from keras.models import load_model, Model
 import data_helper
 import numpy as np
-import copy
+import shutil
 import tensorflow as tf
 import os
 import keras.backend as K
+import matplotlib.pyplot as plt
 
 BATCH_SIZE = 16
 NUM_EPOCHS = 10
-INPUT_DIM = 5
 START_MINUTE = 5 * 60
 STOP_MINUTE = 21 * 60
 
 
 def train():
-    model = Sequential()
-    model.add(Dense(768, input_dim=INPUT_DIM, activation='relu', kernel_initializer='glorot_uniform'))
-    model.add(Dense(100, activation='relu', kernel_initializer='glorot_uniform'))
-    model.add(Dropout(0.1))
-    model.add(Dense(1, kernel_initializer='glorot_uniform'))
+    features = Input(shape=(len(data_helper.SCALLER_PARAMS), ))
+    x = Dense(768, activation='relu', kernel_initializer='glorot_uniform')(features)
+    x = Dropout(0.1)(x)
+    x = Dense(256, activation='relu', kernel_initializer='glorot_uniform')(x)
+    x = Dense(100, activation='relu', kernel_initializer='glorot_uniform')(x)
+    x = Dense(20, activation='relu', kernel_initializer='glorot_uniform')(x)
+    out = Dense(1, kernel_initializer='glorot_uniform')(x)
+    drop_out = Dropout(0.1)(out)
+    model = Model(inputs=[features], outputs=[drop_out])
+    predict_model = Model(inputs=[features], outputs=[out])
+
     model.compile(loss='mse', optimizer='adam')
     x_train, y_train, x_test, y_test = data_helper.get_train_data()
     model.fit(x_train, y_train, batch_size=BATCH_SIZE, epochs=NUM_EPOCHS, validation_split=0.2)
-    model.save('model/model.h5')
-    export_model(model, 'model/')
+    predict_model.save('model/model.h5')
+    export_model(predict_model, 'model/')
 
 
 def export_model(model, export_path, export_version=1):
@@ -34,6 +40,8 @@ def export_model(model, export_path, export_version=1):
     export_path = os.path.join(
         tf.compat.as_bytes(export_path),
         tf.compat.as_bytes(str(export_version)))
+    if os.path.exists(export_path):
+        shutil.rmtree(export_path)
     builder = tf.saved_model.builder.SavedModelBuilder(export_path)
     legacy_init_op = tf.group(tf.tables_initializer(), name='legacy_init_op')
     builder.add_meta_graph_and_variables(
@@ -52,26 +60,19 @@ def predict_custom_date(date_str, cross_name, weather=1):
 
 
 def _predict(holiday_count_down, week_day, cross_name, weather=1):
-    scale_params = np.loadtxt('model/scaller.model')
-
     def _cross_name(x):
         if isinstance(x, str):
             return data_helper.ROAD_CROSS_NAMES[x]
         return x
 
-    def _fit(data):
-        for i in range(len(data)):
-            for j in range(len(data[i])):
-                data[i][j] = (data[i][j] - scale_params[0][j]) / scale_params[1][j]
-        return data
-
     x_predict = [[weather, holiday_count_down, minute, week_day, _cross_name(cross_name)]
                  for minute in range(0, 24 * 60, 5)]
     model = load_model('model/model.h5')
-    x_predict_fit = _fit(copy.deepcopy(x_predict))
+
+    x_predict_fit = x_predict / np.array(data_helper.SCALLER_PARAMS, dtype=float)
     out = model.predict([x_predict_fit]).flatten()
-    return [{'minute': x_predict[index][2], 'value': int(out[index] * scale_params[1][-1] + scale_params[0][-1])}
-            for index in range(len(x_predict))]
+    return [{'minute': x_predict[index][2], 'value': out[index]}
+            for index in range(len(x_predict_fit))]
 
 
 def _hour_weights(data_predict, data_true):
@@ -141,49 +142,29 @@ def _get_regression_score(data_predict, data_true):
     return total_score / 12
 
 
-def submit(mode='debug', match_level='heat'):
-    """
-    :param mode: debug/product
-    :param match_level: heat/final
-    :return:
-    """
-    if mode == 'debug':
-        _dates = ('2019/02/04', '2019/02/07')
-    else:
-        _dates = ('2019/02/11', '2019/02/14')
-
-    if match_level == 'heat':
-        _cross_names = ('wuhe_zhangheng',)
-    else:
-        _cross_names = ('wuhe_zhangheng', 'wuhe_jiaxian', 'wuhe_longping',
-                        'chongzhi_jiaxian', 'chongzhi_longping', 'chongzhi_beier')
-
-    resp_data = {}
-    for cross_name in _cross_names:
-        values = []
-        for date in _dates:
-            result = predict_custom_date(date, cross_name)
-            if match_level == 'heat':
-                result = filter(lambda _x: START_MINUTE <= _x['minute'] < STOP_MINUTE, result)
-            values += [x['value'] for x in result]
-        resp_data[cross_name] = values
-    return {'data': {'resp_data': resp_data}}
-
-
 def evaluate():
     cross_name = 'wuhe_zhangheng'
-    data_predict = predict_custom_date('2019/1/17', cross_name)
+    data_predict = predict_custom_date('2019/2/7', cross_name)
     valid_data = np.loadtxt('model/valid_data')
     data_true = [{'minute': x[2], 'value': x[5]}
                  for x in valid_data if x[4] == data_helper.ROAD_CROSS_NAMES[cross_name]]
     data_true = filter(lambda _x: START_MINUTE <= _x['minute'] < STOP_MINUTE, data_true)
+
     data_predict = filter(lambda _x: START_MINUTE <= _x['minute'] < STOP_MINUTE, data_predict)
     score = _get_classify_score(data_predict, data_true) * 0.4 + \
-            _get_regression_score(data_predict, data_true) * 0.6
+        _get_regression_score(data_predict, data_true) * 0.6
     print('score: {}'.format(score))
+    plt.plot([x['minute'] for x in data_true],
+             [x['value'] for x in data_true],
+             color='b', label='actual')
+    plt.plot([x['minute'] for x in data_predict],
+             [x['value'] for x in data_predict], color='r', label='predict')
+    plt.legend(loc='best')
+
+    plt.show()
 
 
 if __name__ == '__main__':
-    train()
+    # train()
     evaluate()
     # submit()

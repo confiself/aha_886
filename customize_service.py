@@ -29,7 +29,7 @@ class PredictService(TfServingBaseService):
 
     def _postprocess(self, data):
         print("begin to post process")
-        data = data_helper.parse_resp_data(data['result'])
-        schema = json.dumps({'wuhe_zhangheng': data})
+        schema = json.dumps({'wuhe_zhangheng': [x[0] if isinstance(x, list) else x
+                                                for x in data['result']]})
         print("end to post process")
         return {"data": {"resp_data": schema}}
