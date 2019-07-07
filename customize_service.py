@@ -1,5 +1,5 @@
 import json
-import data_helper
+import predict_helper
 
 from model_service.tfserving_model_service import TfServingBaseService
 
@@ -23,13 +23,13 @@ class PredictService(TfServingBaseService):
         data = []
         for _cross_name in _cross_names:
             for _date in _dates:
-                data += data_helper.get_predict_data(_date, _cross_name, match_level)
+                data += predict_helper.get_predict_data(_date, _cross_name, match_level)
         print("end to pre process total {}".format(len(data)))
         return {"inputs": data}
 
     def _postprocess(self, data):
         print("begin to post process")
-        schema = json.dumps({'wuhe_zhangheng': [x[0] if isinstance(x, list) else x
-                                                for x in data['result']]})
+        data = [x[0] if isinstance(x, list) else x for x in data['result']]
+        schema = json.dumps({'wuhe_zhangheng': data})
         print("end to post process")
         return {"data": {"resp_data": schema}}

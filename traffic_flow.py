@@ -2,21 +2,21 @@
 from keras.layers import Dense, Dropout, Input
 from keras.models import load_model, Model
 import data_helper
+import predict_helper
 import numpy as np
 import shutil
 import tensorflow as tf
 import os
 import keras.backend as K
+import pandas as pd
 import matplotlib.pyplot as plt
 
 BATCH_SIZE = 16
-NUM_EPOCHS = 10
-START_MINUTE = 5 * 60
-STOP_MINUTE = 21 * 60
+NUM_EPOCHS = 20
 
 
 def train():
-    features = Input(shape=(len(data_helper.SCALLER_PARAMS), ))
+    features = Input(shape=(len(predict_helper.NORMALIZE_PARAMS), ))
     x = Dense(768, activation='relu', kernel_initializer='glorot_uniform')(features)
     x = Dropout(0.1)(x)
     x = Dense(256, activation='relu', kernel_initializer='glorot_uniform')(x)
@@ -54,27 +54,13 @@ def export_model(model, export_path, export_version=1):
     builder.save()
 
 
-def predict_custom_date(date_str, cross_name, weather=1):
-    _, week_day, holiday_count_down = data_helper.get_date_info(date_str)
-    if date_str == '2019/02/07':
-        week_day = 6
-    return _predict(holiday_count_down, week_day, cross_name, weather)
-
-
-def _predict(holiday_count_down, week_day, cross_name, weather=1):
-    def _cross_name(x):
-        if isinstance(x, str):
-            return data_helper.ROAD_CROSS_NAMES[x]
-        return x
-
-    x_predict = [[weather, holiday_count_down, minute, week_day, _cross_name(cross_name)]
-                 for minute in range(0, 24 * 60, 5)]
+def predict_custom_date(date_str, cross_name):
+    x_predict = predict_helper.get_predict_data(date_str, cross_name, 'debug')
     model = load_model('model/model.h5')
-
-    x_predict_fit = x_predict / np.array(data_helper.SCALLER_PARAMS, dtype=float)
+    x_predict_fit = x_predict / np.array(predict_helper.NORMALIZE_PARAMS, dtype=float)
     out = model.predict([x_predict_fit]).flatten()
     return [{'minute': x_predict[index][2], 'value': out[index]}
-            for index in range(len(x_predict_fit))]
+            for index in range(len(out))]
 
 
 def _hour_weights(data_predict, data_true):
@@ -93,7 +79,7 @@ def _hour_weights(data_predict, data_true):
             hour_weights[x['hour']] = x['value']
     total_flow = sum(hour_weights.values())
     for key in hour_weights:
-        hour_weights[key] /= total_flow
+        hour_weights[key] /= float(total_flow)
     return hour_weights
 
 
@@ -146,13 +132,15 @@ def _get_regression_score(data_predict, data_true):
 
 def evaluate():
     cross_name = 'wuhe_zhangheng'
-    data_predict = predict_custom_date('2019/02/07', cross_name)
-    valid_data = np.loadtxt('model/valid_data')
-    data_true = [{'minute': x[2], 'value': x[5]}
-                 for x in valid_data if x[4] == data_helper.ROAD_CROSS_NAMES[cross_name]]
-    data_true = filter(lambda _x: START_MINUTE <= _x['minute'] < STOP_MINUTE, data_true)
+    data_predict = predict_custom_date('2019/1/17', cross_name)
+    valid_data = pd.read_csv('model/valid_data')
+    valid_data = valid_data[valid_data['cross_name'] == predict_helper.ROAD_CROSS_NAMES[cross_name]]
+    valid_data = valid_data.groupby(by=['minute'])['value'].sum().tolist()
+    data_true = [{'minute': x['minute'], 'value': valid_data[i]}
+                 for i, x in enumerate(data_predict)]
+    data_true = filter(lambda _x: predict_helper.START_MINUTE <= _x['minute'] < predict_helper.STOP_MINUTE, data_true)
 
-    data_predict = filter(lambda _x: START_MINUTE <= _x['minute'] < STOP_MINUTE, data_predict)
+    data_predict = filter(lambda _x: predict_helper.START_MINUTE <= _x['minute'] < predict_helper.STOP_MINUTE, data_predict)
     score = _get_classify_score(data_predict, data_true) * 0.4 + \
         _get_regression_score(data_predict, data_true) * 0.6
     print('score: {}'.format(score))
@@ -167,6 +155,6 @@ def evaluate():
 
 
 if __name__ == '__main__':
-    # train()
+    train()
     evaluate()
     # submit()
