@@ -91,6 +91,8 @@ def _pre_process_data():
 
 def get_predict_data(date_str, cross_name, match_level):
     _, week_day, holiday_count_down = get_date_info(date_str)
+    if date_str == '2019/02/07':
+        week_day = 6
 
     def _cross_name(x):
         if isinstance(x, str):

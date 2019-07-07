@@ -56,6 +56,8 @@ def export_model(model, export_path, export_version=1):
 
 def predict_custom_date(date_str, cross_name, weather=1):
     _, week_day, holiday_count_down = data_helper.get_date_info(date_str)
+    if date_str == '2019/02/07':
+        week_day = 6
     return _predict(holiday_count_down, week_day, cross_name, weather)
 
 
@@ -144,7 +146,7 @@ def _get_regression_score(data_predict, data_true):
 
 def evaluate():
     cross_name = 'wuhe_zhangheng'
-    data_predict = predict_custom_date('2019/2/7', cross_name)
+    data_predict = predict_custom_date('2019/02/07', cross_name)
     valid_data = np.loadtxt('model/valid_data')
     data_true = [{'minute': x[2], 'value': x[5]}
                  for x in valid_data if x[4] == data_helper.ROAD_CROSS_NAMES[cross_name]]
