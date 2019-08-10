@@ -1,5 +1,5 @@
 #! coding:utf-8
-from keras.layers import Dense, Dropout, Input
+from keras.layers import Dense, Dropout, Input, LSTM
 from keras.models import load_model, Model
 import data_helper
 import predict_helper
@@ -16,7 +16,7 @@ NUM_EPOCHS = 20
 
 
 def train():
-    features = Input(shape=(len(predict_helper.NORMALIZE_PARAMS), ))
+    features = Input(shape=(len(predict_helper.NORMALIZE_PARAMS),))
     x = Dense(768, activation='relu', kernel_initializer='glorot_uniform')(features)
     x = Dropout(0.1)(x)
     x = Dense(256, activation='relu', kernel_initializer='glorot_uniform')(x)
@@ -31,6 +31,24 @@ def train():
     x_train, y_train, x_test, y_test = data_helper.get_train_data()
     model.fit(x_train, y_train, batch_size=BATCH_SIZE, epochs=NUM_EPOCHS, validation_split=0.2)
     predict_model.save('model/model.h5')
+    export_model(predict_model, 'model/')
+
+
+def train_seq():
+    features = Input(shape=(12, len(predict_helper.NORMALIZE_PARAMS),))
+    x = LSTM(768, dropout=0.2, recurrent_dropout=0.2)(features)
+    x = Dense(256, activation='relu', kernel_initializer='glorot_uniform')(x)
+    x = Dense(100, activation='relu', kernel_initializer='glorot_uniform')(x)
+    x = Dense(20, activation='relu', kernel_initializer='glorot_uniform')(x)
+    out = Dense(1, kernel_initializer='glorot_uniform')(x)
+    drop_out = Dropout(0.1)(out)
+    model = Model(inputs=[features], outputs=[drop_out])
+    predict_model = Model(inputs=[features], outputs=[out])
+
+    model.compile(loss='mse', optimizer='adam')
+    x_train, y_train = data_helper.get_seq_train_data()
+    model.fit(x_train, y_train, batch_size=BATCH_SIZE, epochs=NUM_EPOCHS, validation_split=0.2)
+    predict_model.save('model/model_seq.h5')
     export_model(predict_model, 'model/')
 
 
@@ -54,12 +72,17 @@ def export_model(model, export_path, export_version=1):
     builder.save()
 
 
-def predict_custom_date(date_str, cross_name):
-    x_predict = predict_helper.get_predict_data(date_str, cross_name, 'debug')
-    model = load_model('model/model.h5')
+def predict_custom_date(date_str, cross_name, mode):
+    if mode == 'seq':
+        x_predict = predict_helper.get_predict_seq_data(date_str, cross_name, 'debug')
+        model = load_model('model/model_seq.h5')
+    else:
+        x_predict = predict_helper.get_predict_data(date_str, cross_name, 'debug')
+        model = load_model('model/model.h5')
     x_predict_fit = x_predict / np.array(predict_helper.NORMALIZE_PARAMS, dtype=float)
     out = model.predict([x_predict_fit]).flatten()
-    return [{'minute': x_predict[index][2], 'value': out[index]}
+    minutes = range(0, 24 * 60, 5)
+    return [{'minute': minutes[index], 'value': out[index]}
             for index in range(len(out))]
 
 
@@ -130,9 +153,9 @@ def _get_regression_score(data_predict, data_true):
     return total_score / 12
 
 
-def evaluate():
+def evaluate(mode='dense'):
     cross_name = 'wuhe_zhangheng'
-    data_predict = predict_custom_date('2019/1/17', cross_name)
+    data_predict = predict_custom_date('2019/1/17', cross_name, mode)
     valid_data = pd.read_csv('model/valid_data')
     valid_data = valid_data[valid_data['cross_name'] == predict_helper.ROAD_CROSS_NAMES[cross_name]]
     valid_data = valid_data.groupby(by=['minute'])['value'].sum().tolist()
@@ -140,9 +163,9 @@ def evaluate():
                  for i, x in enumerate(data_predict)]
     data_true = filter(lambda _x: predict_helper.START_MINUTE <= _x['minute'] < predict_helper.STOP_MINUTE, data_true)
 
-    data_predict = filter(lambda _x: predict_helper.START_MINUTE <= _x['minute'] < predict_helper.STOP_MINUTE, data_predict)
-    score = _get_classify_score(data_predict, data_true) * 0.4 + \
-        _get_regression_score(data_predict, data_true) * 0.6
+    data_predict = filter(lambda _x: predict_helper.START_MINUTE <= _x['minute'] < predict_helper.STOP_MINUTE,
+                          data_predict)
+    score = _get_classify_score(data_predict, data_true) * 0.4 + _get_regression_score(data_predict, data_true) * 0.6
     print('score: {}'.format(score))
     plt.plot([x['minute'] for x in data_true],
              [x['value'] for x in data_true],
@@ -155,6 +178,9 @@ def evaluate():
 
 
 if __name__ == '__main__':
-    train()
-    evaluate()
+    # train()
+    # evaluate()
+    train_seq()
+    evaluate(mode='seq')
     # submit()
+#

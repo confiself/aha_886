@@ -3,6 +3,7 @@ import datetime
 import numpy as np
 START_MINUTE = 5 * 60
 STOP_MINUTE = 21 * 60
+import datetime
 ROAD_CROSS_NAMES = {'chongzhi_beier': 0, 'chongzhi_jiaxian': 1, 'chongzhi_longping': 2,
                     'wuhe_jiaxian': 3, 'wuhe_longping': 4, 'wuhe_zhangheng': 5}
 ROAD_LOCATION_NAMES = {'east': 0, 'south': 1, 'west': 2, 'north': 3}
@@ -45,3 +46,21 @@ def get_predict_data(date_str, cross_name, match_level):
         x_predict = np.array(x_predict) / np.array(NORMALIZE_PARAMS, dtype=float)
         x_predict = x_predict.tolist()
     return x_predict
+
+
+def get_predict_seq_data(date_str, cross_name, match_level):
+    _, week_day, holiday_count_down = get_date_info(date_str)
+    _predict_time = datetime.datetime.strptime(date_str, '%Y/%m/%d')
+    _last_time = _predict_time - datetime.timedelta(days=1)
+    _last_time_str = _last_time.strftime('%Y/%m/%d')
+    _, week_day_before, holiday_count_down_before = get_date_info(_last_time_str)
+    if date_str == '2019/02/07':
+        week_day = 6
+        week_day_before = 5
+    cross_name = ROAD_CROSS_NAMES[cross_name]
+    x_predict = [[1, holiday_count_down_before, minute, week_day_before, cross_name] for minute in range(0, 24 * 60, 5)]
+    x_predict += [[1, holiday_count_down, minute, week_day, cross_name] for minute in range(0, 24 * 60, 5)]
+    x_predict_data = []
+    for i in range(len(x_predict)/2, len(x_predict)):
+        x_predict_data.append(x_predict[i-12: i])
+    return x_predict_data
