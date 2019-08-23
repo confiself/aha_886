@@ -1,6 +1,8 @@
 #! coding:utf-8
 from keras.layers import Dense, Dropout, Input, LSTM
 from keras.models import load_model, Model
+from keras.optimizers import adam, sgd
+from keras.callbacks import ModelCheckpoint
 import data_helper
 import predict_helper
 import numpy as np
@@ -9,14 +11,14 @@ import tensorflow as tf
 import os
 import keras.backend as K
 import pandas as pd
-import matplotlib.pyplot as plt
+# import matplotlib.pyplot as plt
 
 BATCH_SIZE = 16
 NUM_EPOCHS = 20
 
 
 def train():
-    features = Input(shape=(len(predict_helper.NORMALIZE_PARAMS),))
+    features = Input(shape=(len(predict_helper.normalize_params()),))
     x = Dense(768, activation='relu', kernel_initializer='glorot_uniform')(features)
     x = Dropout(0.1)(x)
     x = Dense(256, activation='relu', kernel_initializer='glorot_uniform')(x)
@@ -29,27 +31,26 @@ def train():
 
     model.compile(loss='mse', optimizer='adam')
     x_train, y_train, x_test, y_test = data_helper.get_train_data()
-    model.fit(x_train, y_train, batch_size=BATCH_SIZE, epochs=NUM_EPOCHS, validation_split=0.2)
-    predict_model.save('model/model.h5')
+    checkpoint = ModelCheckpoint('model/model.h5', save_best_only=True)
+    model.fit(x_train, y_train, batch_size=BATCH_SIZE, epochs=NUM_EPOCHS, validation_split=0.2,
+              callbacks=[checkpoint])
     export_model(predict_model, 'model/')
 
 
 def train_seq():
     features = Input(shape=(12, len(predict_helper.NORMALIZE_PARAMS),))
-    x = LSTM(768, dropout=0.2, recurrent_dropout=0.2)(features)
-    x = Dense(256, activation='relu', kernel_initializer='glorot_uniform')(x)
+    x = LSTM(256, recurrent_dropout=0.2)(features)
     x = Dense(100, activation='relu', kernel_initializer='glorot_uniform')(x)
     x = Dense(20, activation='relu', kernel_initializer='glorot_uniform')(x)
     out = Dense(1, kernel_initializer='glorot_uniform')(x)
     drop_out = Dropout(0.1)(out)
     model = Model(inputs=[features], outputs=[drop_out])
     predict_model = Model(inputs=[features], outputs=[out])
-
+    checkpoint = ModelCheckpoint('model/model_seq.h5', save_best_only=True)
     model.compile(loss='mse', optimizer='adam')
     x_train, y_train = data_helper.get_seq_train_data()
-    model.fit(x_train, y_train, batch_size=BATCH_SIZE, epochs=NUM_EPOCHS, validation_split=0.2)
-    predict_model.save('model/model_seq.h5')
-    export_model(predict_model, 'model/')
+    model.fit(x_train, y_train, batch_size=BATCH_SIZE, epochs=NUM_EPOCHS, validation_split=0.2, callbacks=[checkpoint])
+    export_model(predict_model, 'model/', export_version=2)
 
 
 def export_model(model, export_path, export_version=1):
@@ -73,14 +74,17 @@ def export_model(model, export_path, export_version=1):
 
 
 def predict_custom_date(date_str, cross_name, mode):
+    x_predict = predict_helper.get_predict_data(date_str, cross_name, 'debug')
+    model = load_model('model/model.h5')
+    x_predict_fit = x_predict / np.array(predict_helper.normalize_params(), dtype=float)
+    data_current = model.predict([x_predict_fit]).flatten()
+    out = data_current
     if mode == 'seq':
-        x_predict = predict_helper.get_predict_seq_data(date_str, cross_name, 'debug')
+        x_predict = predict_helper.get_predict_seq_data(date_str, cross_name, 'debug', data_current, data_current)
         model = load_model('model/model_seq.h5')
-    else:
-        x_predict = predict_helper.get_predict_data(date_str, cross_name, 'debug')
-        model = load_model('model/model.h5')
-    x_predict_fit = x_predict / np.array(predict_helper.NORMALIZE_PARAMS, dtype=float)
-    out = model.predict([x_predict_fit]).flatten()
+        x_predict_fit = x_predict / np.array(predict_helper.NORMALIZE_PARAMS, dtype=float)
+        out = model.predict([x_predict_fit]).flatten()
+        # out = (out * 0.3 + data_current * 0.6)
     minutes = range(0, 24 * 60, 5)
     return [{'minute': minutes[index], 'value': out[index]}
             for index in range(len(out))]
@@ -167,20 +171,19 @@ def evaluate(mode='dense'):
                           data_predict)
     score = _get_classify_score(data_predict, data_true) * 0.4 + _get_regression_score(data_predict, data_true) * 0.6
     print('score: {}'.format(score))
-    plt.plot([x['minute'] for x in data_true],
-             [x['value'] for x in data_true],
-             color='b', label='actual')
-    plt.plot([x['minute'] for x in data_predict],
-             [x['value'] for x in data_predict], color='r', label='predict')
-    plt.legend(loc='best')
-
-    plt.show()
+    # plt.plot([x['minute'] for x in data_true],
+    #          [x['value'] for x in data_true],
+    #          color='b', label='actual')
+    # plt.plot([x['minute'] for x in data_predict],
+    #          [x['value'] for x in data_predict], color='r', label='predict')
+    # plt.legend(loc='best')
+    #
+    # plt.show()
 
 
 if __name__ == '__main__':
-    # train()
-    # evaluate()
-    train_seq()
-    evaluate(mode='seq')
+    train()
+    evaluate()
+    # train_seq()
+    # evaluate(mode='seq')
     # submit()
-#

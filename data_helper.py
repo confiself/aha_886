@@ -68,7 +68,7 @@ def get_train_data():
     y_data = data['value'].values
     x_data = data.drop('value', axis=1).values
     x_data = x_data[:, [0, 1, 2, 4, 3]]
-    x_data = np.divide(x_data, np.array(predict_helper.NORMALIZE_PARAMS, dtype=float))
+    x_data = np.divide(x_data, np.array(predict_helper.normalize_params(), dtype=float))
     train_size = int(0.9 * x_data.shape[0])
     x_train, y_train, x_test, y_test = x_data[0: train_size], y_data[0:train_size], \
                                        x_data[train_size:], y_data[train_size:]
@@ -79,8 +79,9 @@ def get_seq_train_data():
     data = pd.read_csv('model/train_data')
     data = data.groupby(by=['weather', 'hcd', 'minute', 'cross_name', 'weekday']).agg({'value': sum}).reset_index()
     y_data = data['value'].values
-    x_data = data.drop('value', axis=1).values
-    x_data = x_data[:, [0, 1, 2, 4, 3]]
+    # x_data = data.drop('value', axis=1).values
+    x_data = data.values
+    x_data = x_data[:, [0, 1, 2, 4, 3, 5]]
     x_data_seq = []
     y_data_seq = []
     for i, _data in enumerate(x_data):

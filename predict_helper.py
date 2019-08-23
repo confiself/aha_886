@@ -11,7 +11,13 @@ ROAD_LOCATION_NAMES = {'east': 0, 'south': 1, 'west': 2, 'north': 3}
 DIRECTIONS = (0, 1)
 
 # 天气，离放假前的天数，分钟段，周几 ,路口
-NORMALIZE_PARAMS = [1, 30, 24 * 60, 7, 5]
+NORMALIZE_PARAMS = [1, 30, 24 * 60, 7, 5, 500]
+
+
+def normalize_params(mode='dense'):
+    if mode == 'dense':
+        return NORMALIZE_PARAMS[:-1]
+    return NORMALIZE_PARAMS
 
 
 def get_cross_name(x):
@@ -43,12 +49,12 @@ def get_predict_data(date_str, cross_name, match_level):
         x_predict.append([1, holiday_count_down, minute, week_day, cross_name])
     if match_level == 'heat':
         x_predict = filter(lambda _x: START_MINUTE <= _x[2] < STOP_MINUTE, x_predict)
-        x_predict = np.array(x_predict) / np.array(NORMALIZE_PARAMS, dtype=float)
+        x_predict = np.array(x_predict) / np.array(normalize_params(), dtype=float)
         x_predict = x_predict.tolist()
     return x_predict
 
 
-def get_predict_seq_data(date_str, cross_name, match_level):
+def get_predict_seq_data(date_str, cross_name, match_level, data_before, data_current):
     _, week_day, holiday_count_down = get_date_info(date_str)
     _predict_time = datetime.datetime.strptime(date_str, '%Y/%m/%d')
     _last_time = _predict_time - datetime.timedelta(days=1)
@@ -58,8 +64,10 @@ def get_predict_seq_data(date_str, cross_name, match_level):
         week_day = 6
         week_day_before = 5
     cross_name = ROAD_CROSS_NAMES[cross_name]
-    x_predict = [[1, holiday_count_down_before, minute, week_day_before, cross_name] for minute in range(0, 24 * 60, 5)]
-    x_predict += [[1, holiday_count_down, minute, week_day, cross_name] for minute in range(0, 24 * 60, 5)]
+    x_predict = [[1, holiday_count_down_before, minute, week_day_before, cross_name, data_before[minute // 5]]
+                 for minute in range(0, 24 * 60, 5)]
+    x_predict += [[1, holiday_count_down, minute, week_day, cross_name, data_current[minute // 5]]
+                  for minute in range(0, 24 * 60, 5)]
     x_predict_data = []
     for i in range(len(x_predict)/2, len(x_predict)):
         x_predict_data.append(x_predict[i-12: i])
