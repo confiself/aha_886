@@ -8,7 +8,7 @@ class PredictService(TfServingBaseService):
 
     def _preprocess(self, data):
         self._match_level = 'final'
-        self._mode = 'product'
+        self._mode = 'debug'
         if self._mode == 'debug':
             self._dates = ('2019/02/04', '2019/02/07')
         else:
