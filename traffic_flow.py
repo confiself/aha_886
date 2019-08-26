@@ -72,15 +72,14 @@ def export_model(model, export_path, export_version=1):
 
 
 def predict_custom_date(date_str, cross_name, mode):
-    x_predict = predict_helper.get_predict_data(date_str, cross_name, 'heat')
+    x_predict = predict_helper.get_predict_data(date_str, cross_name)
     model = load_model('model/model.h5')
     data_current = model.predict([x_predict]).flatten()
     out = data_current
     if mode == 'seq':
         x_predict = predict_helper.get_predict_seq_data(date_str, cross_name)
         model = load_model('model/model_seq.h5')
-        x_predict_fit = x_predict / np.array(predict_helper.normalize_params(), dtype=float)
-        out = model.predict([x_predict_fit]).flatten()
+        out = model.predict([x_predict]).flatten()
         # out = (out * 0.3 + data_current * 0.6)
     minutes = range(0, 24 * 60, 5)
     return [{'minute': minutes[index], 'value': out[index]}
@@ -179,9 +178,9 @@ def evaluate(mode='dense'):
 
 
 if __name__ == '__main__':
-    train()
-    evaluate()
+    # train()
+    # evaluate()
     # train_seq()
-    # evaluate(mode='seq')
+    evaluate(mode='seq')
     # submit()
 

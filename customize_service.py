@@ -8,7 +8,9 @@ class PredictService(TfServingBaseService):
 
     def _preprocess(self, data):
         self._match_level = 'final'
-        self._mode = 'product'
+        # dense/seq
+        self._model_type = 'seq'
+        self._mode = 'debug'
         if self._mode == 'debug':
             self._dates = ('2019/02/04', '2019/02/07')
         else:
@@ -23,7 +25,11 @@ class PredictService(TfServingBaseService):
         data = []
         for _cross_name in self._cross_names:
             for _date in self._dates:
-                data += predict_helper.get_predict_data(_date, _cross_name, self._match_level)
+                if self._model_type == 'dense':
+                    data += predict_helper.get_predict_data(_date, _cross_name)
+                else:
+                    data += predict_helper.get_predict_seq_data(_date, _cross_name)
+
         print("end to pre process total {}".format(len(data)))
         return {"inputs": data}
 
