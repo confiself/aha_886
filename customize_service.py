@@ -5,13 +5,12 @@ from model_service.tfserving_model_service import TfServingBaseService
 
 
 class PredictService(TfServingBaseService):
-    def __init__(self, model_name, model_path):
-        self.model_path = model_path
+    def _preprocess(self, data):
+        self.model_path = '/home/mind/model/1'
         # product_1.txt/product_2.txt/product_3.txt
         self.custom_data_name = 'debug.txt'
         self.use_custom = True
 
-    def _preprocess(self, data):
         self._match_level = 'final'
         # dense/seq
         self._model_type = 'dense'
@@ -51,5 +50,5 @@ class PredictService(TfServingBaseService):
             custom_path = os.path.join(self.model_path, self.custom_data_name)
             with open(custom_path) as f:
                 resp_data = eval(f.readline())
-                print("load custom data success")
+                print("load custom data success {}".format(len(resp_data)))
         return {"data": {"resp_data": json.dumps(resp_data)}}
