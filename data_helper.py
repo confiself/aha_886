@@ -79,9 +79,9 @@ def get_seq_train_data():
     data = pd.read_csv('model/train_data')
     data = data.groupby(by=['weather', 'hcd', 'minute', 'cross_name', 'weekday']).agg({'value': sum}).reset_index()
     y_data = data['value'].values
-    # x_data = data.drop('value', axis=1).values
-    x_data = data.values
-    x_data = x_data[:, [0, 1, 2, 4, 3, 5]]
+    x_data = data.drop('value', axis=1).values
+    # x_data = data.values
+    x_data = x_data[:, [0, 1, 2, 4, 3]]
     x_data_seq = []
     y_data_seq = []
     for i, _data in enumerate(x_data):
@@ -91,7 +91,7 @@ def get_seq_train_data():
         y_data_seq.append(y_data[i])
     x_data = np.array(x_data_seq)
     y_data = np.array(y_data_seq)
-    x_data = np.divide(x_data, np.array(predict_helper.NORMALIZE_PARAMS, dtype=float))
+    x_data = np.divide(x_data, np.array(predict_helper.normalize_params(), dtype=float))
     return x_data, y_data
 
 

@@ -11,10 +11,10 @@ import tensorflow as tf
 import os
 import keras.backend as K
 import pandas as pd
-# import matplotlib.pyplot as plt
+import matplotlib.pyplot as plt
 
 BATCH_SIZE = 16
-NUM_EPOCHS = 20
+NUM_EPOCHS = 10
 
 
 def train():
@@ -38,13 +38,11 @@ def train():
 
 
 def train_seq():
-    features = Input(shape=(12, len(predict_helper.NORMALIZE_PARAMS),))
-    x = LSTM(256, recurrent_dropout=0.2)(features)
-    x = Dense(100, activation='relu', kernel_initializer='glorot_uniform')(x)
-    x = Dense(20, activation='relu', kernel_initializer='glorot_uniform')(x)
-    out = Dense(1, kernel_initializer='glorot_uniform')(x)
-    drop_out = Dropout(0.1)(out)
-    model = Model(inputs=[features], outputs=[drop_out])
+    features = Input(shape=(12, len(predict_helper.normalize_params()),))
+    x = LSTM(32, recurrent_dropout=0.2, dropout=0.2)(features)
+    x = Dense(256, activation='relu', kernel_initializer='glorot_uniform')(x)
+    out = Dense(1)(x)
+    model = Model(inputs=[features], outputs=[out])
     predict_model = Model(inputs=[features], outputs=[out])
     checkpoint = ModelCheckpoint('model/model_seq.h5', save_best_only=True)
     model.compile(loss='mse', optimizer='adam')
@@ -74,16 +72,14 @@ def export_model(model, export_path, export_version=1):
 
 
 def predict_custom_date(date_str, cross_name, mode):
-    x_predict = predict_helper.get_predict_data(date_str, cross_name, 'debug')
+    x_predict = predict_helper.get_predict_data(date_str, cross_name)
     model = load_model('model/model.h5')
-    x_predict_fit = x_predict / np.array(predict_helper.normalize_params(), dtype=float)
-    data_current = model.predict([x_predict_fit]).flatten()
+    data_current = model.predict([x_predict]).flatten()
     out = data_current
     if mode == 'seq':
-        x_predict = predict_helper.get_predict_seq_data(date_str, cross_name, 'debug', data_current, data_current)
+        x_predict = predict_helper.get_predict_seq_data(date_str, cross_name)
         model = load_model('model/model_seq.h5')
-        x_predict_fit = x_predict / np.array(predict_helper.NORMALIZE_PARAMS, dtype=float)
-        out = model.predict([x_predict_fit]).flatten()
+        out = model.predict([x_predict]).flatten()
         # out = (out * 0.3 + data_current * 0.6)
     minutes = range(0, 24 * 60, 5)
     return [{'minute': minutes[index], 'value': out[index]}
@@ -171,19 +167,20 @@ def evaluate(mode='dense'):
                           data_predict)
     score = _get_classify_score(data_predict, data_true) * 0.4 + _get_regression_score(data_predict, data_true) * 0.6
     print('score: {}'.format(score))
-    # plt.plot([x['minute'] for x in data_true],
-    #          [x['value'] for x in data_true],
-    #          color='b', label='actual')
-    # plt.plot([x['minute'] for x in data_predict],
-    #          [x['value'] for x in data_predict], color='r', label='predict')
-    # plt.legend(loc='best')
-    #
-    # plt.show()
+    plt.plot([x['minute'] for x in data_true],
+             [x['value'] for x in data_true],
+             color='b', label='actual')
+    plt.plot([x['minute'] for x in data_predict],
+             [x['value'] for x in data_predict], color='r', label='predict')
+    plt.legend(loc='best')
+
+    plt.show()
 
 
 if __name__ == '__main__':
-    train()
-    evaluate()
+    # train()
+    # evaluate()
     # train_seq()
-    # evaluate(mode='seq')
+    evaluate(mode='seq')
     # submit()
+
