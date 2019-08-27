@@ -1,16 +1,21 @@
 import json
 import predict_helper
-
+import os
 from model_service.tfserving_model_service import TfServingBaseService
 
 
 class PredictService(TfServingBaseService):
+    def __init__(self, model_name, model_path):
+        self.model_path = model_path
+        # product_1.txt/product_2.txt/product_3.txt
+        self.custom_data_name = 'debug.txt'
+        self.use_custom = True
 
     def _preprocess(self, data):
         self._match_level = 'final'
         # dense/seq
-        self._model_type = 'seq'
-        self._mode = 'debug'
+        self._model_type = 'dense'
+        self._mode = 'final'
         if self._mode == 'debug':
             self._dates = ('2019/02/04', '2019/02/07')
         else:
@@ -42,4 +47,9 @@ class PredictService(TfServingBaseService):
         for i in range(cross_num):
             resp_data[self._cross_names[i]] = data[i * data_num_per_day: (i+1) * data_num_per_day]
         print("end to post process")
+        if self.use_custom:
+            custom_path = os.path.join(self.model_path, self.custom_data_name)
+            with open(custom_path) as f:
+                resp_data = eval(f.readline())
+                print("load custom data success")
         return {"data": {"resp_data": json.dumps(resp_data)}}
