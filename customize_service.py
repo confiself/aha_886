@@ -8,7 +8,7 @@ class PredictService(TfServingBaseService):
     def _preprocess(self, data):
         self.model_path = '/home/mind/model/1'
         # product_1.txt/product_2.txt/product_3.txt
-        self.custom_data_name = 'debug.txt'
+        self.custom_data_name = 'product_3.txt'
         self.use_custom = True
 
         self._match_level = 'final'

@@ -9,6 +9,7 @@ import pandas as pd
 import copy
 import json
 import matplotlib.pyplot as plt
+from scipy.signal import medfilt
 
 DATA_FILE_NAME = 'traffic_flow_prediction_data.zip'
 
@@ -126,6 +127,78 @@ def get_seq_train_data():
     x_data = np.divide(x_data, np.array(predict_helper.normalize_params(), dtype=float))
     return x_data, y_data
 
+def _hour_weights(data_predict, data_true):
+    def _add_hour(_x):
+        _x['hour'] = int(_x['minute'] / 60)
+        return _x
+
+    data_predict = [_add_hour(x) for x in data_predict]
+    data_true = [_add_hour(x) for x in data_true]
+
+    hour_weights = {}
+    for x in data_true:
+        if x['hour'] in hour_weights:
+            hour_weights[x['hour']] += x['value']
+        else:
+            hour_weights[x['hour']] = x['value']
+    total_flow = sum(hour_weights.values())
+    for key in hour_weights:
+        hour_weights[key] /= float(total_flow)
+    return hour_weights
+
+
+def _get_classify_score(data_predict, data_true):
+    """
+    :param data_predict: [{'minute': 300, 'value': 3}]
+    :return:
+    """
+    hour_weights = _hour_weights(data_predict, data_true)
+
+    total_score = 0
+    for i, _cur_true in enumerate(data_true):
+        if i + 1 == len(data_true):
+            break
+        _next_true = data_true[i + 1]
+        _cur_predict = data_predict[i]
+        _next_predict = data_predict[i + 1]
+        _score = 0
+        same_direct = ((_next_true['value'] - _cur_true['value']) * (_next_predict['value'] - _cur_predict['value']) > 0
+                       or (_next_true['value'] - _cur_true['value'] == 0
+                           and _next_true['value'] - _cur_true['value'] == 0
+                           )
+                       )
+        if same_direct:
+            _score = 100 * hour_weights[_cur_true['hour']]
+        total_score += _score
+    return total_score / 12
+
+
+def _get_regression_score(data_predict, data_true):
+    def _sigmoid(x):
+        s = 1 / (1 + np.exp(-x))
+        return s
+
+    hour_weights = _hour_weights(data_predict, data_true)
+    total_score = 0
+    for i, _cur_true in enumerate(data_true):
+        if i + 1 == len(data_true):
+            break
+        _cur_predict = data_predict[i]
+        weight = hour_weights[_cur_true['hour']]
+        mse = np.square(_cur_predict['value'] - _cur_true['value'])
+        if mse < 0.000001:
+            mse = 0.000001
+        sig_x = 30 / mse
+        _score = weight * 100 * _sigmoid(sig_x)
+        total_score += _score
+    return total_score / 12
+
+def get_score(a, b):
+    b = [{'value': x, 'minute': i * 5} for i, x in enumerate(b)]
+    a = [{'value': x, 'minute': i * 5} for i, x in enumerate(a)]
+
+    score = _get_classify_score(a, b) * 0.4 + _get_regression_score(a, b) * 0.6
+    return score
 
 class RawData(object):
     def __init__(self):
@@ -134,6 +207,12 @@ class RawData(object):
         self.data = data.values
         self._cross_names = ('wuhe_zhangheng', 'wuhe_jiaxian', 'wuhe_longping',
                              'chongzhi_jiaxian', 'chongzhi_longping', 'chongzhi_beier')
+        self.workday_1_date_list = ['2019/1/14', '2019/1/21', '2019/1/28']
+        self.workday_2_date_list = ['2019/1/17', '2019/1/24', '2019/1/31']
+        self.avg_data = {}
+        self.kernel_size = 3
+
+        self.get_average_data()
 
     def get_data(self, date_str, cross_name):
         cross_name = predict_helper.ROAD_CROSS_NAMES[cross_name]
@@ -144,6 +223,39 @@ class RawData(object):
         plt.plot([x[2] for x in data], [x[-1] for x in data])
         plt.show()
 
+    def get_average_data(self):
+
+        for cross_name in self._cross_names:
+            data = []
+            for workday_date in self.workday_1_date_list:
+                _data = self.get_data(workday_date, cross_name)
+                if len(_data) != 288:
+                    continue
+                _data = [x[-1] for x in _data]
+                data.append(_data)
+            avg_data = np.average(np.array(data), axis=0).tolist()
+            avg_data_1 = medfilt(avg_data, kernel_size=self.kernel_size)
+            avg_value_1 = sum(avg_data_1) / float(len(avg_data_1))
+            # plt.plot(data[0])
+            # plt.plot(avg_data_1)
+            # plt.show()
+            data = []
+            for workday_date in self.workday_2_date_list:
+                _data = self.get_data(workday_date, cross_name)
+                if len(_data) != 288:
+                    continue
+                _data = [x[-1] for x in _data]
+                data.append(_data)
+            avg_data = np.average(np.array(data), axis=0).tolist()
+            avg_data_2 = medfilt(avg_data, kernel_size=self.kernel_size)
+            avg_value_2 = sum(avg_data_2) / float(len(avg_data_2))
+
+            # plt.plot(data[0])
+            # plt.plot(avg_data_1)
+            # plt.show()
+            self.avg_data[cross_name] = {0: {'data': avg_data_1, 'avg_value': avg_value_1},
+                                         1: {'data': avg_data_2, 'avg_value': avg_value_2}}
+
     def plot_data_list(self, date_str_list, cross_name):
         colors = ['r', 'g', 'b']
         data_before = None
@@ -153,16 +265,14 @@ class RawData(object):
                 continue
             if data_before:
                 total = sum([x[-1] for x in data]) - sum([x[-1] for x in data_before])
-                print total / 288, 'diff', date_str
+                print(total / 288, 'diff', date_str)
             data_before = data
-            print len(data), date_str
 
             plt.plot([x[2] for x in data], [x[-1] for x in data], color=colors[i])
 
         plt.show()
 
-    @staticmethod
-    def write_data_debug():
+    def write_data_debug(self):
         raw_data = RawData()
         cross_dict = {'chongzhi_beier': ['2019/1/28', '2019/1/31'],
                       'chongzhi_jiaxian': ['2019/1/28', '2019/1/31'],
@@ -172,25 +282,40 @@ class RawData(object):
                       'wuhe_zhangheng': ['2019/1/28', '2019/1/31'],
                       }
         resp_data = {}
+        scores = 0
         for cross_name, date_str_list in cross_dict.items():
             _data = []
-            for data_str in date_str_list:
-                _data += raw_data.get_data(data_str, cross_name)
-            resp_data[cross_name] = [x[-1] for x in _data]
+            for i, date_str in enumerate(date_str_list):
+                cur_data = raw_data.get_data(date_str, cross_name)
+                cur_data = [x[-1] for x in cur_data]
+                cur_data_before = cur_data
+                diff = cur_data - self.avg_data[cross_name][i]['data']
+                diff = medfilt(diff, kernel_size=self.kernel_size)
+                cur_data = self.avg_data[cross_name][i]['data'] + diff
+                cur_data = [max(0, x) for x in cur_data]
+                _data += cur_data
+                # plt.plot(cur_data, color='r')
+                # plt.plot(self.avg_data[cross_name][i]['data'], color='g')
+                # plt.plot(cur_data_before, color='b')
+
+                score = get_score(cur_data, cur_data_before)
+                print(score, cross_name, date_str)
+                scores += score
+                plt.show()
+            resp_data[cross_name] = _data
             assert len(_data) == 288 * 2
+        print(scores/12, 'score_average')
         with open('model/debug.txt', 'w') as f_w:
             f_w.writelines(json.dumps(resp_data))
 
-    @staticmethod
-    def write_data_product(mode='1'):
-        raw_data = RawData()
+    def write_data_product(self, mode='1'):
         if mode == '1':
-            cross_dict = {'chongzhi_beier': ['2019/1/28', '2019/1/17'],
-                          'chongzhi_jiaxian': ['2019/1/28', '2019/1/17'],
-                          'chongzhi_longping': ['2019/1/28', '2019/1/17'],
-                          'wuhe_jiaxian': ['2019/1/28', '2019/1/17'],
-                          'wuhe_longping': ['2019/1/28', '2019/1/17'],
-                          'wuhe_zhangheng': ['2019/1/28', '2019/1/17'],
+            cross_dict = {'chongzhi_beier': ['2019/2/1', '2019/1/31'],
+                          'chongzhi_jiaxian': ['2019/2/1', '2019/1/31'],
+                          'chongzhi_longping': ['2019/2/1', '2019/1/31'],
+                          'wuhe_jiaxian': ['2019/2/1', '2019/1/31'],
+                          'wuhe_longping': ['2019/2/1', '2019/1/31'],
+                          'wuhe_zhangheng': ['2019/2/1', '2019/1/31'],
                           }
         elif mode == '2':
             cross_dict = {'chongzhi_beier': ['2019/1/28', '2019/1/24'],
@@ -201,27 +326,52 @@ class RawData(object):
                           'wuhe_zhangheng': ['2019/1/28', '2019/1/24'],
                           }
         else:
-            cross_dict = {'chongzhi_beier': ['2019/1/28', '2019/1/17'],
-                          'chongzhi_jiaxian': ['2019/1/28', '2019/1/17'],
-                          'chongzhi_longping': ['2019/1/28', '2019/1/17'],
-                          'wuhe_jiaxian': ['2019/1/28', '2019/1/17'],
-                          'wuhe_longping': ['2019/1/28', '2019/1/17'],
-                          'wuhe_zhangheng': ['2019/1/28', '2019/1/17'],
+            cross_dict = {'chongzhi_beier': ['2019/2/1', '2019/1/31'],
+                          'chongzhi_jiaxian': ['2019/2/1', '2019/1/31'],
+                          'chongzhi_longping': ['2019/2/1', '2019/1/31'],
+                          'wuhe_jiaxian': ['2019/2/1', '2019/1/31'],
+                          'wuhe_longping': ['2019/2/1', '2019/1/31'],
+                          'wuhe_zhangheng': ['2019/2/1', '2019/1/31'],
                           }
         resp_data = {}
+        scores = 0
         for cross_name, date_str_list in cross_dict.items():
             _data = []
-            for data_str in date_str_list:
-                cur_data = raw_data.get_data(data_str, cross_name)
+            for i, date_str in enumerate(date_str_list):
+                cur_data = raw_data.get_data(date_str, cross_name)
                 cur_data = [x[-1] for x in cur_data]
-                if mode == '3' and data_str == '2019/1/17':
-                    for i in range(144, 168):
-                        cur_data[i] += 3
-                    for i in range(216, len(cur_data)):
-                        cur_data[i] += 3
+
+                cur_data_before = cur_data
+                diff = cur_data - self.avg_data[cross_name][i]['data']
+                diff = medfilt(diff, kernel_size=self.kernel_size)
+                cur_data = self.avg_data[cross_name][i]['data'] + diff
+                cur_data = [max(0, x) for x in cur_data]
+
+                if mode == '3' and date_str == '2019/2/1':
+                    for j in range(500/5, 700/5):
+                        cur_data[j] -= 20
+                    for j in range(700/5, 900/5):
+                        cur_data[j] -= 13
+                    for j in range(900/5, 1000/5):
+                        cur_data[j] -= 20
+                    for j in range(1100/5, 1300/5):
+                        cur_data[j] -= 5
+                    for j in range(1000/5, 1100/5):
+                        diff = (1100.0/5 - j) / 100.0/5
+                        cur_data[j] -= diff
+
+                plt.plot(cur_data, color='r')
+                plt.plot(self.avg_data[cross_name][i]['data'], color='g')
+                plt.plot(cur_data_before, color='b')
+                plt.show()
+
+                score = get_score(cur_data, cur_data_before)
+                print(score, cross_name, date_str)
+                scores += score
                 _data += cur_data
             resp_data[cross_name] = _data
             assert len(_data) == 288 * 2
+        print(scores/12, 'score_average')
         with open('model/product_{}.txt'.format(mode), 'w') as f_w:
             f_w.writelines(json.dumps(resp_data))
 
@@ -247,12 +397,23 @@ class RawData(object):
     @staticmethod
     def self_test():
         raw_data = RawData()
-        raw_data.plot_data_list(['2019/1/21', '2019/1/28'], cross_name='chongzhi_beier')
-        raw_data.plot_data_list(['2019/1/17', '2019/1/24', '2019/1/31'], cross_name='chongzhi_beier')
-        raw_data.write_data_product('1')
+        {'chongzhi_beier': ['2019/1/28', '2019/1/31'],
+         'chongzhi_jiaxian': ['2019/1/28', '2019/1/31'],
+         'chongzhi_longping': ['2019/1/28', '2019/1/31'],
+         'wuhe_jiaxian': ['2019/1/28', '2019/1/31'],
+         'wuhe_longping': ['2019/1/28', '2019/1/31'],
+         'wuhe_zhangheng': ['2019/1/28', '2019/1/31'],
+         }
+        # raw_data.plot_data_list(['2019/1/21', '2019/1/28', '2019/2/1'], cross_name='chongzhi_longping')
+        # raw_data.plot_data_list(['2019/1/17', '2019/1/24', '2019/1/31'], cross_name='chongzhi_longping')
+        raw_data.write_data_product('3')
+
 
 if __name__ == '__main__':
-    _pre_process_data()
+    # _pre_process_data()
     # _pre_process_data_gen()
-    # raw_data = RawData()
+    raw_data = RawData()
+    raw_data.self_test()
+    # raw_data.write_data_debug()
+    # raw_data.write_data_product(mode='3')
     # raw_data.plot_data_product()
